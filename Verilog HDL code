@@ -1,0 +1,112 @@
+module elevator_controller(
+    input clk,                   // System clock
+    input rst,                   // Reset signal (active high)
+    input [1:0] request_floor,   // Requested floor
+    input [1:0] e1_passengers,   // Number of passengers in elevator 1
+    input [1:0] e2_passengers,   // Number of passengers in elevator 2
+    input request_valid,         // Signal indicating a valid floor request
+    output reg [1:0] e1_position, // Target position for elevator 1
+    output reg [1:0] e2_position, // Target position for elevator 2
+    output reg [1:0] e1_current_floor, // Current floor of elevator 1
+    output reg [1:0] e2_current_floor  // Current floor of elevator 2
+);
+    // Request queue to store pending floor requests
+    reg [1:0] request_queue [0:7];
+    integer head, tail;          // Queue pointers
+    integer i;                   // Loop counter 
+
+    // Track elevator busy status (1 = elevator is moving to a destination)
+    reg e1_busy = 0;
+    reg e2_busy = 0;
+
+    // Variables for calculating distance between elevators and requested floor
+    integer e1_dist, e2_dist;
+    reg [1:0] current_request;   // Currently processed request from the queue
+    
+    // Combined status of both elevators
+    reg [1:0] elevator_status;   // Bit 0: e1_busy, Bit 1: e2_busy
+    
+// Debug signal to track the state of the decision logic
+    reg [3:0] debug_state = 0;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            e1_position <= 2'b00;       // Reset elevator 1 position to floor 0
+            e2_position <= 2'b00;       // Reset elevator 2 position to floor 0
+            e1_current_floor <= 2'b00;  // Reset elevator 1 current floor to floor 0
+            e2_current_floor <= 2'b00;  // Reset elevator 2 current floor to floor 0
+            e1_busy <= 0;               // Mark elevator 1 as not busy
+            e2_busy <= 0;               // Mark elevator 2 as not busy
+            head <= 0;                  // Reset queue head pointer
+            tail <= 0;                  // Reset queue tail pointer
+            
+// Update current floor positions
+            e1_current_floor <= e1_position;
+            e2_current_floor <= e2_position;
+            
+            //Clear busy status when elevators reach their destinations
+            if (e1_current_floor == e1_position) e1_busy <= 0;
+            if (e2_current_floor == e2_position) e2_busy <= 0;
+
+            //Process the next request in the queue if available
+            if (head < tail) begin
+                // Get the next request from the queue
+                current_request = request_queue[head];
+                // Calculate distance from each elevator to the requested floor
+                // Using absolute difference between current floor and requested floor
+                e1_dist = (e1_current_floor > current_request) ? 
+                          (e1_current_floor - current_request) : (current_request - e1_current_floor);
+                e2_dist = (e2_current_floor > current_request) ? 
+                          (e2_current_floor - current_request) : (current_request - e2_current_floor);
+
+                // Create a 2-bit value representing elevator availability
+                elevator_status = {e2_busy, e1_busy};
+
+                // Use case statement for elevator assignment based on availability
+                case (elevator_status)
+                    2'b00: begin  // Case 1: Both elevators are available
+                        debug_state <= 1;
+                        if (e1_dist < e2_dist) begin
+                            // Elevator 1 is closer - assign to elevator 1
+                            e1_position <= current_request;
+                            e1_busy <= 1;
+                        end else if (e2_dist < e1_dist) begin
+                            // Elevator 2 is closer - assign to elevator 2
+                            e2_position <= current_request;
+                            e2_busy <= 1;
+end else begin
+                            // Equal distance - use passenger count as tiebreaker
+                            if (e1_passengers <= e2_passengers) begin
+                                e1_position <= current_request;
+                                e1_busy <= 1;
+                            end else begin
+                                e2_position <= current_request;
+                                e2_busy <= 1;
+                            end
+                        end
+head <= head + 1;  // Move to next request
+                    end
+                    
+                    2'b01: begin  // Case 2: Only elevator 2 is available
+                        debug_state <= 3;
+                        e2_position <= current_request;
+                        e2_busy <= 1;
+                        head <= head + 1;  // Move to next request
+                    end
+                    
+2'b10: begin  // Case 3: Only elevator 1 is available
+                        debug_state <= 2;
+                        e1_position <= current_request;
+                        e1_busy <= 1;
+                        head <= head + 1;  // Move to next request
+                    end
+                    
+                    2'b11: begin  // Case 4: Both elevators are busy
+                        debug_state <= 4;
+                        // No action taken - request stays in queue
+                    end
+                endcase
+            end
+        end
+    end
+endmodule
