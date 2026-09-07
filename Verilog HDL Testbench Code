@@ -1,0 +1,77 @@
+module tb_elevator_controller();
+    // Test inputs
+    reg clk;                   // Clock signal
+    reg rst;                   // Reset signal
+    reg [1:0] request_floor;   // Floor request input (0-3)
+    reg [1:0] e1_passengers;   // Passenger count for elevator 1
+    reg [1:0] e2_passengers;   // Passenger count for elevator 2
+    reg request_valid;         // Valid request signal
+    
+    // Test outputs
+    wire [1:0] e1_position;     // Elevator 1 target position
+    wire [1:0] e2_position;     // Elevator 2 target position
+    wire [1:0] e1_current_floor; // Elevator 1 current floor
+    wire [1:0] e2_current_floor; // Elevator 2 current floor
+ // Instantiate the unit under test (UUT)
+    elevator_controller uut (
+        .clk(clk),
+        .rst(rst),
+        .request_floor(request_floor),
+        .e1_passengers(e1_passengers),
+        .e2_passengers(e2_passengers),
+        .request_valid(request_valid),
+        .e1_position(e1_position),
+        .e2_position(e2_position),
+        .e1_current_floor(e1_current_floor),
+        .e2_current_floor(e2_current_floor)
+    );
+    initial begin
+        $monitor("Time=%0t: Req=%d, e1_pos=%d, e2_pos=%d, e1_floor=%d, e2_floor=%d, e1_busy=%d, e2_busy=%d, state=%d, e1_dist=%d, e2_dist=%d", 
+                 $time, request_floor, e1_position, e2_position, 
+                 e1_current_floor, e2_current_floor,
+                 uut.e1_busy, uut.e2_busy, uut.debug_state,
+                 uut.e1_dist, uut.e2_dist);
+    end
+    // Clock generator 
+    always #5 clk = ~clk;
+    // Test sequence
+    initial begin
+        // Initialize test signals
+        clk = 0;
+        rst = 1;              // Start with reset active
+        request_valid = 0;
+        #10;                  // Hold reset for 10ns        // Release reset and set initial passenger counts
+        rst = 0;
+        e1_passengers = 2;    // Elevator 1 has 2 passengers
+        e2_passengers = 3;    // Elevator 2 has 3 passengers
+
+        // Test Case 1: Request for Floor 2
+        request_floor = 2;
+        request_valid = 1;    // Assert valid request
+        #10;                  // Wait one clock cycle
+        request_valid = 0;    // De-assert valid request
+        #10;                  // Wait for processing
+
+// Test Case 2: Request for Floor 1
+        request_floor = 1;
+        request_valid = 1;
+        #10;
+        request_valid = 0;
+        #10;
+
+        // Test Case 3: Request for Floor 3
+        request_floor = 3;
+        request_valid = 1;
+        #10;request_valid = 0;
+        #10;
+
+        // Test Case 4: Request for Floor 1
+        request_floor = 1;
+        request_valid = 1;
+        #10;
+        request_valid = 0;
+        #50;              
+        // End simulation
+        $finish;
+    end
+endmodule
